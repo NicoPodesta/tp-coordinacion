@@ -2,6 +2,7 @@ import pika
 from pika.exceptions import AMQPConnectionError, AMQPChannelError
 
 from .middleware import (
+    MessageMiddleware,
     MessageMiddlewareQueue,
     MessageMiddlewareExchange,
     MessageMiddlewareDisconnectedError,
@@ -169,6 +170,61 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
         except Exception as e:
             raise MessageMiddlewareMessageError(
                 f"Unexpected error while sending message to exchange: {e}"
+            )
+
+    def start_consuming(self, on_message_callback):
+        self._core.start_consuming(self._queue_name, on_message_callback)
+
+    def stop_consuming(self):
+        self._core.stop_consuming()
+
+    def close(self):
+        self._core.close()
+
+
+class MessageMiddlewareFanoutRabbitMQ(MessageMiddleware):
+
+    def __init__(self, host, exchange_name):
+        self._exchange_name = exchange_name
+        self._core = None
+        self._queue_name = None
+
+        try:
+            self._core = _MessageMiddlewareRabbitMQ(host)
+            channel = self._core.channel
+            channel.exchange_declare(
+                exchange=self._exchange_name,
+                exchange_type="fanout",
+                durable=False,
+            )
+            self._queue_name = channel.queue_declare(
+                queue="", exclusive=True
+            ).method.queue
+            channel.queue_bind(
+                exchange=self._exchange_name,
+                queue=self._queue_name,
+            )
+            channel.basic_qos(prefetch_count=1)
+        except Exception as e:
+            raise MessageMiddlewareDisconnectedError(
+                f"Error connecting or declaring fanout exchange: {e}"
+            )
+
+    def send(self, message):
+        try:
+            self._core.channel.basic_publish(
+                exchange=self._exchange_name,
+                routing_key="",
+                body=message,
+                properties=pika.BasicProperties(delivery_mode=1),
+            )
+        except (AMQPConnectionError, AMQPChannelError) as e:
+            raise MessageMiddlewareDisconnectedError(
+                f"Connection lost while sending message to fanout: {e}"
+            )
+        except Exception as e:
+            raise MessageMiddlewareMessageError(
+                f"Unexpected error while sending message to fanout: {e}"
             )
 
     def start_consuming(self, on_message_callback):
