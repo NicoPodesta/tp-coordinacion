@@ -28,9 +28,7 @@ class AggregationFilter:
     def handle_sigterm(self, signum, frame):
         logging.info("Received SIGTERM signal")
         try:
-            self.input_exchange.schedule_on_consumer_thread(
-                self.input_exchange.stop_consuming
-            )
+            self.input_exchange.stop_consuming_threadsafe()
         except Exception as e:
             logging.error(f"Error stopping consumer: {e}")
         if self._prev_sigterm_handler and callable(self._prev_sigterm_handler):

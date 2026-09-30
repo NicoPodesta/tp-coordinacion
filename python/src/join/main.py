@@ -26,9 +26,7 @@ class JoinFilter:
     def handle_sigterm(self, signum, frame):
         logging.info("Received SIGTERM signal")
         try:
-            self.input_queue.schedule_on_consumer_thread(
-                self.input_queue.stop_consuming
-            )
+            self.input_queue.stop_consuming_threadsafe()
         except Exception as e:
             logging.error(f"Error stopping consumer: {e}")
         if self._prev_sigterm_handler and callable(self._prev_sigterm_handler):

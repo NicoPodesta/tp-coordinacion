@@ -33,16 +33,12 @@ class SumFilter:
         logging.info("Received SIGTERM signal")
         try:
             if hasattr(self, "input_queue") and self.input_queue:
-                self.input_queue.schedule_on_consumer_thread(
-                    self.input_queue.stop_consuming
-                )
+                self.input_queue.stop_consuming_threadsafe()
         except Exception as e:
             logging.error(f"Error stopping input queue consumer: {e}")
         try:
             if hasattr(self, "control_consumer") and self.control_consumer:
-                self.control_consumer.schedule_on_consumer_thread(
-                    self.control_consumer.stop_consuming
-                )
+                self.control_consumer.stop_consuming_threadsafe()
         except Exception as e:
             logging.error(f"Error stopping control consumer: {e}")
         if self._prev_sigterm_handler and callable(self._prev_sigterm_handler):
