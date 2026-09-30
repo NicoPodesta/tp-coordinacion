@@ -1,6 +1,7 @@
 import os
 import logging
 import threading
+import zlib
 
 from common import middleware, message_protocol, fruit_item
 
@@ -37,9 +38,10 @@ class SumFilter:
             self.data_output_exchanges.append(data_output_exchange)
 
     def _process_data(self, client_id, fruit, amount):
-        logging.info(f"Process data for client {client_id}")
+        logging.debug(f"Process data for client {client_id}: {fruit}={amount}")
         with self.lock:
             if client_id not in self.fruits_by_client:
+                logging.info(f"Started receiving data for client {client_id}")
                 self.fruits_by_client[client_id] = {}
             client_fruits = self.fruits_by_client[client_id]
             client_fruits[fruit] = client_fruits.get(
@@ -52,12 +54,17 @@ class SumFilter:
             client_fruits = self.fruits_by_client.pop(client_id, {})
 
         for final_fruit_item in client_fruits.values():
-            for data_output_exchange in self.data_output_exchanges:
-                data_output_exchange.send(
-                    message_protocol.internal.serialize(
-                        [client_id, final_fruit_item.fruit, final_fruit_item.amount]
-                    )
+            agg_index = (
+                0
+                if AGGREGATION_AMOUNT <= 0
+                else zlib.crc32(final_fruit_item.fruit.encode("utf-8"))
+                % AGGREGATION_AMOUNT
+            )
+            self.data_output_exchanges[agg_index].send(
+                message_protocol.internal.serialize(
+                    [client_id, final_fruit_item.fruit, final_fruit_item.amount]
                 )
+            )
 
         logging.info(f"Broadcasting EOF message for client {client_id}")
         for data_output_exchange in self.data_output_exchanges:

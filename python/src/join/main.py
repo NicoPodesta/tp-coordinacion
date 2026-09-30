@@ -22,11 +22,47 @@ class JoinFilter:
         self.output_queue = middleware.MessageMiddlewareQueueRabbitMQ(
             MOM_HOST, OUTPUT_QUEUE
         )
+        self.partial_tops_by_client = {}
+
+    def _send_final_top(self, client_id):
+        partial_tops = self.partial_tops_by_client.pop(client_id, [])
+        all_fruits = {}
+
+        for top in partial_tops:
+            for fruit, amount in top:
+                fi = fruit_item.FruitItem(fruit, int(amount))
+                if fruit in all_fruits:
+                    all_fruits[fruit] = all_fruits[fruit] + fi
+                else:
+                    all_fruits[fruit] = fi
+
+        sorted_items = sorted(all_fruits.values())
+        top_chunk = list(sorted_items[-TOP_SIZE:])
+        top_chunk.reverse()
+        final_top = list(map(lambda fi: (fi.fruit, fi.amount), top_chunk))
+
+        logging.info(f"Consolidated final top for client {client_id}: {final_top}")
+        self.output_queue.send(
+            message_protocol.internal.serialize([client_id, final_top])
+        )
+        logging.info(f"Sent final top to gateway for client {client_id}")
 
     def process_messsage(self, message, ack, nack):
-        logging.info("Received top")
-        fruit_top = message_protocol.internal.deserialize(message)
-        self.output_queue.send(message_protocol.internal.serialize(fruit_top))
+        fields = message_protocol.internal.deserialize(message)
+        client_id = fields[0]
+        partial_top = fields[1]
+
+        if client_id not in self.partial_tops_by_client:
+            self.partial_tops_by_client[client_id] = []
+        self.partial_tops_by_client[client_id].append(partial_top)
+
+        logging.info(
+            f"Received partial top {len(self.partial_tops_by_client[client_id])}/{AGGREGATION_AMOUNT} for client {client_id}"
+        )
+
+        if len(self.partial_tops_by_client[client_id]) == AGGREGATION_AMOUNT:
+            self._send_final_top(client_id)
+
         ack()
 
     def start(self):
@@ -37,7 +73,6 @@ def main():
     logging.basicConfig(level=logging.INFO)
     join_filter = JoinFilter()
     join_filter.start()
-
     return 0
 
 

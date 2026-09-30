@@ -26,8 +26,11 @@ class AggregationFilter:
         self.eof_count = {}
 
     def _process_data(self, client_id, fruit, amount):
-        logging.info(f"Processing data message for client {client_id}")
+        logging.debug(
+            f"Processing data message for client {client_id}: {fruit}={amount}"
+        )
         if client_id not in self.fruits_by_client:
+            logging.info(f"Started receiving data for client {client_id}")
             self.fruits_by_client[client_id] = {}
         client_fruits = self.fruits_by_client[client_id]
         client_fruits[fruit] = client_fruits.get(
@@ -57,9 +60,9 @@ class AggregationFilter:
         self.output_queue.send(
             message_protocol.internal.serialize([client_id, fruit_top])
         )
+        logging.info(f"Sent partial top to join for client {client_id}")
 
     def process_messsage(self, message, ack, nack):
-        logging.info("Process message")
         fields = message_protocol.internal.deserialize(message)
         if len(fields) == 3:
             self._process_data(*fields)
