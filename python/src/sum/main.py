@@ -62,9 +62,11 @@ class SumFilter:
                 logging.info(f"Started receiving data for client {client_id}")
                 self.fruits_by_client[client_id] = {}
             client_fruits = self.fruits_by_client[client_id]
-            client_fruits[fruit] = client_fruits.get(
-                fruit, fruit_item.FruitItem(fruit, 0)
-            ) + fruit_item.FruitItem(fruit, int(amount))
+            new_fruit_item = fruit_item.FruitItem(fruit, int(amount))
+            if fruit in client_fruits:
+                client_fruits[fruit] = client_fruits[fruit] + new_fruit_item
+            else:
+                client_fruits[fruit] = new_fruit_item
 
     def _process_eof(self, client_id):
         logging.info(f"Sending data messages for client {client_id}")

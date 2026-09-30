@@ -38,16 +38,18 @@ class JoinFilter:
 
         for top in partial_tops:
             for fruit, amount in top:
-                fi = fruit_item.FruitItem(fruit, int(amount))
+                new_fruit_item = fruit_item.FruitItem(fruit, int(amount))
                 if fruit in all_fruits:
-                    all_fruits[fruit] = all_fruits[fruit] + fi
+                    all_fruits[fruit] = all_fruits[fruit] + new_fruit_item
                 else:
-                    all_fruits[fruit] = fi
+                    all_fruits[fruit] = new_fruit_item
 
         sorted_items = sorted(all_fruits.values())
         top_chunk = list(sorted_items[-TOP_SIZE:])
         top_chunk.reverse()
-        final_top = list(map(lambda fi: (fi.fruit, fi.amount), top_chunk))
+        final_top = list(
+            map(lambda fruit_item: (fruit_item.fruit, fruit_item.amount), top_chunk)
+        )
 
         self.output_queue.send(
             message_protocol.internal.serialize([client_id, final_top])
