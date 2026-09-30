@@ -71,6 +71,11 @@ class _MessageMiddlewareRabbitMQ:
                 f"Connection lost while stopping consumption: {e}"
             )
 
+    def schedule_on_consumer_thread(self, fn):
+        if not self.connection or self.connection.is_closed:
+            raise MessageMiddlewareDisconnectedError("No active connection to RabbitMQ")
+        self.connection.add_callback_threadsafe(fn)
+
     def close(self):
         try:
             if self.connection and self.connection.is_open:
@@ -113,6 +118,10 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
     def start_consuming(self, on_message_callback):
         self._core.start_consuming(self._queue_name, on_message_callback)
+
+    def schedule_on_consumer_thread(self, fn):
+        if self._core:
+            self._core.schedule_on_consumer_thread(fn)
 
     def stop_consuming(self):
         self._core.stop_consuming()
@@ -175,6 +184,10 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
     def start_consuming(self, on_message_callback):
         self._core.start_consuming(self._queue_name, on_message_callback)
 
+    def schedule_on_consumer_thread(self, fn):
+        if self._core:
+            self._core.schedule_on_consumer_thread(fn)
+
     def stop_consuming(self):
         self._core.stop_consuming()
 
@@ -229,6 +242,10 @@ class MessageMiddlewareFanoutRabbitMQ(MessageMiddleware):
 
     def start_consuming(self, on_message_callback):
         self._core.start_consuming(self._queue_name, on_message_callback)
+
+    def schedule_on_consumer_thread(self, fn):
+        if self._core:
+            self._core.schedule_on_consumer_thread(fn)
 
     def stop_consuming(self):
         self._core.stop_consuming()

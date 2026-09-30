@@ -1,5 +1,6 @@
 import os
 import logging
+import signal
 
 from common import middleware, message_protocol, fruit_item
 
@@ -14,6 +15,7 @@ TOP_SIZE = int(os.environ["TOP_SIZE"])
 class AggregationFilter:
 
     def __init__(self):
+        self._prev_sigterm_handler = signal.signal(signal.SIGTERM, self.handle_sigterm)
         self.input_exchange = middleware.MessageMiddlewareExchangeRabbitMQ(
             MOM_HOST, AGGREGATION_PREFIX, [f"{AGGREGATION_PREFIX}_{ID}"]
         )
@@ -22,6 +24,17 @@ class AggregationFilter:
         )
         self.fruits_by_client = {}
         self.eof_count = {}
+
+    def handle_sigterm(self, signum, frame):
+        logging.info("Received SIGTERM signal")
+        try:
+            self.input_exchange.schedule_on_consumer_thread(
+                self.input_exchange.stop_consuming
+            )
+        except Exception as e:
+            logging.error(f"Error stopping consumer: {e}")
+        if self._prev_sigterm_handler and callable(self._prev_sigterm_handler):
+            self._prev_sigterm_handler(signum, frame)
 
     def _process_data(self, client_id, fruit, amount):
         logging.debug(
@@ -44,7 +57,7 @@ class AggregationFilter:
             return
 
         client_fruits = self.fruits_by_client.pop(client_id, {})
-        del self.eof_count[client_id]
+        self.eof_count.pop(client_id, None)
 
         items = sorted(client_fruits.values())
         fruit_chunk = list(items[-TOP_SIZE:])
@@ -61,15 +74,34 @@ class AggregationFilter:
         logging.info(f"Sent partial top to join for client {client_id}")
 
     def process_messsage(self, message, ack, nack):
-        fields = message_protocol.internal.deserialize(message)
-        if len(fields) == 3:
-            self._process_data(*fields)
-        else:
-            self._process_eof(*fields)
-        ack()
+        try:
+            fields = message_protocol.internal.deserialize(message)
+            if len(fields) == 3:
+                self._process_data(*fields)
+            else:
+                self._process_eof(*fields)
+            ack()
+        except Exception as e:
+            logging.error(f"Error processing message in aggregation: {e}")
+            nack()
 
     def start(self):
-        self.input_exchange.start_consuming(self.process_messsage)
+        try:
+            self.input_exchange.start_consuming(self.process_messsage)
+        except middleware.MessageMiddlewareDisconnectedError:
+            logging.info("Disconnected from RabbitMQ")
+        finally:
+            self.close()
+
+    def close(self):
+        try:
+            self.input_exchange.close()
+        except Exception as e:
+            logging.error(f"Error closing input exchange: {e}")
+        try:
+            self.output_queue.close()
+        except Exception as e:
+            logging.error(f"Error closing output queue: {e}")
 
 
 def main():
