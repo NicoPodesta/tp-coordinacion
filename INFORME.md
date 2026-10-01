@@ -10,7 +10,7 @@ Al ser `input_queue` una cola compartida, el mensaje de EOF enviado por el Gatew
 
 - Se utiliza un exchange de tipo Fanout.
 - Cada réplica de Sum ejecuta un thread de control con una cola exclusiva vinculada a este exchange.
-- La réplica que recibe el EOF original desde `input_queue` lo retransmite al Fanout, logrando que todas las réplicas de Sum se notifiquen de la finalización del cliente.
+- La réplica que recibe el EOF original desde `input_queue` lo retransmite al exchange, logrando que todas las réplicas de Sum se notifiquen de la finalización del cliente.
 - Se utiliza un `threading.Event` para garantizar que el thread de control esté activo y suscrito antes de que el hilo principal consuma datos de `input_queue`, y un `threading.Lock` para el acceso concurrente al diccionario en memoria.
 
 ### Sincronización Sum → Aggregation
